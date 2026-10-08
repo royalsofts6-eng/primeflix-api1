@@ -5,6 +5,7 @@
 import { tmdb, TTL } from "../src/tmdb.js";
 import { resolveStream, providerHealth } from "../src/chain.js";
 import { cacheStats } from "../src/cache.js";
+import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
 
 const VERSION = "1.0.0";
 const CLUSTER = process.env.CLUSTER_NAME || "api1";
@@ -62,6 +63,9 @@ export default async function handler(req: any, res: any) {
           "GET /v1/tmdb/tv/:id/recommendations",
           "GET /v1/stream/movie/:tmdbId",
           "GET /v1/stream/tv/:tmdbId/:season/:episode",
+          "GET /v1/niazi/series",
+          "GET /v1/niazi/series/:id/episodes",
+          "GET /v1/niazi/stream/:serieId/:episodeId",
         ],
       });
     }
@@ -118,6 +122,20 @@ export default async function handler(req: any, res: any) {
     }
     if ((m = path.match(/^\/v1\/stream\/tv\/([^/]+)\/([^/]+)\/([^/]+)$/))) {
       const data = await resolveStream(m[1], "tv", num(m[2], 1), num(m[3], 1));
+      return send(res, 200, ok(data), { "Cache-Control": "no-store" });
+    }
+
+    // NiaziTV Turkish dramas (stream URLs NEVER cached — signed/expiring)
+    if (path === "/v1/niazi/series") {
+      const data = await getSeries();
+      return send(res, 200, ok(data), edgeCache(NIAZI_TTL.series, NIAZI_TTL.staleSeries));
+    }
+    if ((m = path.match(/^\/v1\/niazi\/series\/([^/]+)\/episodes$/))) {
+      const data = await getEpisodes(m[1]);
+      return send(res, 200, ok(data), edgeCache(NIAZI_TTL.episodes, NIAZI_TTL.staleEpisodes));
+    }
+    if ((m = path.match(/^\/v1\/niazi\/stream\/([^/]+)\/([^/]+)$/))) {
+      const data = await getStreamUrl(m[1], m[2]);
       return send(res, 200, ok(data), { "Cache-Control": "no-store" });
     }
 
