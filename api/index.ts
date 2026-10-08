@@ -176,19 +176,6 @@ export default async function handler(req: any, res: any) {
     }
 
 
-    // DEBUG: test niazitv connectivity
-    if (path === "/v1/debug/niazi") {
-      const t0 = Date.now();
-      try {
-        const r = await fetch("https://play.niazitv.pk/all-series", {
-          headers: { "User-Agent": "Mozilla/5.0" },
-          signal: AbortSignal.timeout(7000),
-        });
-        const txt = await r.text();
-        return send(res, 200, ok({ status: r.status, ms: Date.now()-t0, len: txt.length }));
-      } catch (e: any) {
-        return send(res, 200, ok({ error: String(e?.message || e), ms: Date.now()-t0 }));
-      }
     }
 
     // NiaziTV Turkish dramas (stream URLs NEVER cached — signed/expiring)
