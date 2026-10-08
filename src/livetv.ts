@@ -320,6 +320,7 @@ const CURATED: Channel[] = [
     type: "hls",
     url: "http://51.75.127.199:3141/starplushd/index.m3u8",
     fallbacks: [],
+    logo: "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/india/star-plus-in.png",
   },
   {
     id: "colors-tv",
@@ -338,6 +339,7 @@ const CURATED: Channel[] = [
     type: "hls",
     url: "http://38.96.178.205/SONYHD/index.m3u8",
     fallbacks: [],
+    logo: "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/india/sony-entertainment-television-in.png",
   },
   {
     id: "star-utsav",
@@ -359,6 +361,7 @@ const CURATED: Channel[] = [
     type: "hls",
     url: "http://51.75.127.199:3141/stargoldselecthd/index.m3u8",
     fallbacks: [],
+    logo: "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/india/star-gold-in.png",
   },
   {
     id: "sony-max",
@@ -368,6 +371,7 @@ const CURATED: Channel[] = [
     type: "hls",
     url: "http://107.167.16.138/sonymax2/index.m3u8?token=test",
     fallbacks: [],
+    logo: "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/india/sony-max-in.png",
   },
   {
     id: "zee-cinema",
