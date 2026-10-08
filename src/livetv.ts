@@ -21,7 +21,7 @@ export interface Channel {
   id: string;
   name: string;
   category: ChannelCategory;
-  country: "pk" | "in";
+  country: "pk" | "in" | "int";
   type: "hls" | "youtube";
   url: string;
   fallbacks: string[];
@@ -36,7 +36,8 @@ export type ChannelCategory =
   | "in-entertainment"
   | "in-movies"
   | "sports"
-  | "in-news";
+  | "in-news"
+  | "islamic";
 
 export const CATEGORY_LABELS: Record<ChannelCategory, string> = {
   "pk-entertainment": "Pakistani Entertainment",
@@ -47,6 +48,7 @@ export const CATEGORY_LABELS: Record<ChannelCategory, string> = {
   "in-movies": "Indian Movies",
   sports: "Sports & Cricket",
   "in-news": "Indian News",
+  islamic: "Islamic",
 };
 
 // ── Curated channel list ────────────────────────────────────────────────────
@@ -124,6 +126,26 @@ const CURATED: Channel[] = [
     url: "https://jk3lz82elw79-hls-live.5centscdn.com/harPalGeo/955ad3298db330b5ee880c2c9e6f23a0.sdp/playlist.m3u8",
     fallbacks: [],
     logo: "https://i.imgur.com/NX3vvAX.png",
+  },
+  {
+    id: "8xm",
+    name: "8XM",
+    category: "pk-entertainment",
+    country: "pk",
+    type: "hls",
+    url: "https://cdn4.mjunoon.tv:8087/streamtest/131M/chunks.m3u8",
+    fallbacks: [],
+    logo: "https://i.ibb.co/Kc0xHyBb/8XM-Logo.png",
+  },
+  {
+    id: "discover-pakistan",
+    name: "Discover Pakistan",
+    category: "pk-entertainment",
+    country: "pk",
+    type: "hls",
+    url: "https://livecdn.live247stream.com/discoverpakistan/web/playlist.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/IJH47fJ.png",
   },
 
   // — Pakistani Movies —
@@ -351,6 +373,56 @@ const CURATED: Channel[] = [
     fallbacks: [],
     logo: "https://dtil.tmsimg.com/assets/s159132_ld_h15_aa.png?lock=720x540",
   },
+  {
+    id: "zee-tv",
+    name: "Zee TV",
+    category: "in-entertainment",
+    country: "in",
+    type: "hls",
+    url: "http://51.75.127.199:3141/zeetv/index.m3u8",
+    fallbacks: [],
+    logo: "https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_ZEE_TV/images/LOGO_HD/LOGO_HD_image.png",
+  },
+  {
+    id: "star-bharat",
+    name: "Star Bharat",
+    category: "in-entertainment",
+    country: "in",
+    type: "hls",
+    url: "http://51.75.127.199:3141/starbharat/index.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/Q8ajPij.png",
+  },
+  {
+    id: "9x-jalwa",
+    name: "9X Jalwa",
+    category: "in-entertainment",
+    country: "in",
+    type: "hls",
+    url: "https://wiselp.wiseplayout.com/9X_Jalwa/master.m3u8",
+    fallbacks: [],
+    logo: "https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_9X_JALWA/images/LOGO_HD/image.png",
+  },
+  {
+    id: "b4u-music",
+    name: "B4U Music",
+    category: "in-entertainment",
+    country: "in",
+    type: "hls",
+    url: "https://amg01408-amg01408c5-amgplt0747.playout.now3.amagi.tv/b4um001/playlist.m3u8",
+    fallbacks: [],
+    logo: "https://dtil.tmsimg.com/assets/s158141_ld_h15_aa.png?lock=720x540",
+  },
+  {
+    id: "zoom-tv",
+    name: "Zoom",
+    category: "in-entertainment",
+    country: "in",
+    type: "hls",
+    url: "https://dai.google.com/linear/hls/event/JCAm25qkRXiKcK1AJMlvKQ/master.m3u8",
+    fallbacks: [],
+    logo: "https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_ZOOM/images/LOGO_HD/image.png",
+  },
 
   // — Indian Movies —
   {
@@ -410,6 +482,16 @@ const CURATED: Channel[] = [
     url: "http://51.75.127.199:3141/starutsavmovies/index.m3u8",
     fallbacks: [],
     logo: "https://dtil.tmsimg.com/assets/s143856_ld_h15_aa.png?lock=720x540",
+  },
+  {
+    id: "b4u-movies",
+    name: "B4U Movies",
+    category: "in-movies",
+    country: "in",
+    type: "hls",
+    url: "https://streams.tangotv.in/B4UMOVIES/ORIGIN/index.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/M9kMFJl.png",
   },
 
   // — Sports & Cricket —
@@ -511,6 +593,108 @@ const CURATED: Channel[] = [
     url: "https://livehub-voidnet.onrender.com/cluster/streamcore/in/AAJTAK_REDIS.m3u8",
     fallbacks: ["https://www.youtube.com/@aajtak/live"],
     logo: "https://i.imgur.com/gS9Qkfy.png",
+  },
+  {
+    id: "india-tv",
+    name: "India TV",
+    category: "in-news",
+    country: "in",
+    type: "hls",
+    url: "https://pl-indiatvnews.akamaized.net/out/v1/db79179b608641ceaa5a4d0dd0dca8da/index.m3u8",
+    fallbacks: [],
+    logo: "https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_INDIA_TV/images/LOGO_HD/image.png",
+  },
+  {
+    id: "zee-news",
+    name: "Zee News",
+    category: "in-news",
+    country: "in",
+    type: "hls",
+    url: "https://dknttpxmr0dwf.cloudfront.net/index_57.m3u8",
+    fallbacks: [],
+    logo: "https://dtil.tmsimg.com/assets/GNLZZGG0023VWYC.png?lock=720x540",
+  },
+
+  // — Islamic (verified live 2026-10-08) —
+  {
+    id: "makkah-tv",
+    name: "Makkah TV",
+    category: "islamic",
+    country: "int",
+    type: "hls",
+    url: "https://media2.streambrothers.com:1936/8122/8122/playlist.m3u8",
+    fallbacks: [],
+    logo: "https://i.ibb.co/r2k71w5N/download.png",
+  },
+  {
+    id: "madani-channel-urdu",
+    name: "Madani Channel Urdu",
+    category: "islamic",
+    country: "pk",
+    type: "hls",
+    url: "https://streaming.madanichannel.tv/static/streaming-playlists/hls/b9790f10-cb0d-4e30-82bf-84a756234e58/master.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/MitLeCJ.png",
+  },
+  {
+    id: "madani-channel-english",
+    name: "Madani Channel English",
+    category: "islamic",
+    country: "pk",
+    type: "hls",
+    url: "http://tvsen7.aynascope.net/MadaniTV/index.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/Abi9j0A.png",
+  },
+  {
+    id: "peace-tv-urdu",
+    name: "Peace TV Urdu",
+    category: "islamic",
+    country: "pk",
+    type: "hls",
+    url: "https://dzkyvlfyge.erbvr.com/PeaceTvUrdu/index.m3u8",
+    fallbacks: [],
+    logo: "https://github.com/fawazahmed0/tiger/raw/master/peace/urdu.jpg",
+  },
+  {
+    id: "peace-tv-english",
+    name: "Peace TV English",
+    category: "islamic",
+    country: "int",
+    type: "hls",
+    url: "https://dzkyvlfyge.erbvr.com/PeaceTvEnglish/index.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/rjgCM2B.png",
+  },
+  {
+    id: "huda-tv",
+    name: "Huda TV",
+    category: "islamic",
+    country: "int",
+    type: "hls",
+    url: "https://cdn.bestream.io:19360/elfaro1/elfaro1.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/1UUjU26.png",
+  },
+  {
+    id: "iqraa-quran",
+    name: "Iqraa Quran",
+    category: "islamic",
+    country: "int",
+    type: "hls",
+    url: "https://playlist.fasttvcdn.com/pl/dlkqw1ftuvuuzkcb4pxdcg/Iqraafasttv2/playlist.m3u8",
+    fallbacks: [],
+    logo: "https://i.imgur.com/HPVsIa4.png",
+  },
+  {
+    id: "quran-tv",
+    name: "Quran TV",
+    category: "islamic",
+    country: "int",
+    type: "hls",
+    url: "https://ncdn.telewebion.ir/quran/live/playlist.m3u8",
+    fallbacks: [],
+    logo: "https://upload.wikimedia.org/wikipedia/fa/d/df/Quarntvlogo.png",
   },
 ];
 
