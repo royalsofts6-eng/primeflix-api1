@@ -15,12 +15,25 @@
  * Circuit breaker: 5 consecutive fails -> 5 min cooldown.
  */
 import { vidlink } from "./providers/vidlink.js";
+import { vaplayer } from "./providers/vaplayer.js";
+import { tmdb } from "./tmdb.js";
 import type { ProviderFn, ProviderResult } from "./providers/types.js";
 
 // ── Stubs (Phase 1b — return null so chain skips them) ───────────────────────
-const notYet = (name: string): ProviderFn => async () => {
-  // console.debug(`[chain] ${name} not implemented yet`);
+const notYet = (_name: string): ProviderFn => async () => {
   return null;
+};
+
+/** VaPlayer needs IMDb ID — resolve from TMDB (cached 24h). */
+const vaplayerWithImdb: ProviderFn = async (tmdbId, type, season, episode) => {
+  try {
+    const details = (await (type === "movie" ? tmdb.movie(tmdbId) : tmdb.tv(tmdbId))) as any;
+    const imdbId: string | undefined = details?.imdb_id;
+    if (!imdbId) return null;
+    return vaplayer(tmdbId, type, season, episode, imdbId);
+  } catch {
+    return null;
+  }
 };
 
 interface ProviderEntry {
@@ -88,7 +101,7 @@ export function providerHealth(): Record<string, unknown> {
 // ── Chain ───────────────────────────────────────────────────────────────────
 const PROVIDERS: ProviderEntry[] = [
   { name: "vidlink", fn: vidlink },
-  { name: "vaplayer", fn: notYet("vaplayer") },
+  { name: "vaplayer", fn: vaplayerWithImdb },
   { name: "vidrock", fn: notYet("vidrock") },
   { name: "vidsrc", fn: notYet("vidsrc") },
   { name: "screenscape", fn: notYet("screenscape") },
