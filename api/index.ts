@@ -6,7 +6,6 @@ import { tmdb, TTL } from "../src/tmdb.js";
 import { resolveStream, providerHealth } from "../src/chain.js";
 import { cacheStats } from "../src/cache.js";
 import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
-import { getChannels, refreshChannels, groupByCategory } from "../src/livetv.js";
 import { securityStats } from "../src/security/middleware.js";
 import {
   authGatePlain,
@@ -116,7 +115,6 @@ export default async function handler(req: any, res: any) {
           "GET /v1/niazi/series",
           "GET /v1/niazi/series/:id/episodes",
           "GET /v1/niazi/stream/:serieId/:episodeId",
-          "GET /v1/livetv/channels",
         ],
       });
     }
@@ -189,33 +187,6 @@ export default async function handler(req: any, res: any) {
     if ((m = path.match(/^\/v1\/niazi\/stream\/([^/]+)\/([^/]+)$/))) {
       const data = await getStreamUrl(m[1], m[2]);
       return send(res, 200, ok(data), { "Cache-Control": "no-store" });
-    }
-
-    // Live TV — auto-updating channels (12h TTL + 7d stale-while-revalidate)
-    if (path === "/v1/livetv/channels") {
-      const result = await getChannels();
-      return send(res, 200, ok({
-        refreshedAt: result.refreshedAt,
-        total: result.total,
-        alive: result.alive,
-        categories: groupByCategory(result.channels),
-      }), edgeCache(12 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000));
-    }
-
-    // Cron: Live TV refresh (CRON_SECRET protected).
-    // Vercel Hobby only allows DAILY cron — 12h TTL + SWR keeps data fresh.
-    if (path === "/v1/cron/livetv-refresh") {
-      const secret = process.env.CRON_SECRET;
-      const auth = req.headers["authorization"] || "";
-      if (!secret || auth !== `Bearer ${secret}`) {
-        return send(res, 401, fail("unauthorized", "BAD_CRON_SECRET"));
-      }
-      const result = await refreshChannels();
-      return send(res, 200, ok({
-        refreshedAt: result.refreshedAt,
-        total: result.total,
-        alive: result.alive,
-      }));
     }
 
     return send(res, 404, fail("not found", "NOT_FOUND"));
