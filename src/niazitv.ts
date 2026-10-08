@@ -1,12 +1,13 @@
 /**
- * NiaziTV scraper — Turkish dramas with Urdu subtitles.
+ * NiaziTV scraper — Turkish dramas with Urdu subtitles. (v2 — updated 2026-10-08)
  *
  * Source: https://play.niazitv.pk (server-rendered HTML, no JS needed)
  *
- * Endpoints:
+ * URL pattern (verified live 2026-10-08):
  *   GET /all-series                          -> drama catalog (27 series)
- *   GET /drama/{serieId}/single-serie        -> episode list
- *   GET /drama/{serieId}/single-serie?watch=1&episode={episodeId}
+ *   GET /all-seasons?serie={serieId}          -> SEASON list for a drama
+ *   GET /drama/{seasonId}                     -> episode list for a season
+ *   GET /drama/{seasonId}?watch=1&episode={episodeId}
  *                                            -> JSON-LD contentUrl (.m3u8)
  *
  * CRITICAL (C2): contentUrl MUST be validated against the CDN allowlist.
@@ -15,6 +16,7 @@
  *
  * Caching:
  *   series list : 24h (+ 7d stale)
+ *   seasons     : 24h (+ 7d stale)
  *   episodes    : 6h  (+ 1d stale)
  *   stream URLs : NO cache (signed/expiring)
  */
@@ -29,8 +31,10 @@ const D = 24 * H;
 
 export const NIAZI_TTL = {
   series: 24 * H,
+  seasons: 24 * H,
   episodes: 6 * H,
   staleSeries: 7 * D,
+  staleSeasons: 7 * D,
   staleEpisodes: 1 * D,
 };
 
@@ -74,6 +78,14 @@ export interface NiaziSeries {
   title: string;
   image: string;
   seasons: number;
+}
+
+export interface NiaziSeason {
+  id: string;
+  title: string;
+  image: string;
+  year: string;
+  url: string;
 }
 
 export interface NiaziEpisode {
@@ -126,7 +138,47 @@ export async function getSeries(): Promise<NiaziSeries[]> {
   }
 }
 
-// ── 2. Episode list ─────────────────────────────────────────────────────────
+// ── 2. Season list (per series) ─────────────────────────────────────────────
+const RE_SEASON = new RegExp(
+  '<img src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>.*?' +
+    '<a class="uk-position-cover" href="https://play\\.niazitv\\.pk/drama/(\\d+)/([^"]+)"></a>.*?' +
+    '<h5[^>]*>\\s*([^<]+?)</h5>',
+  "gs"
+);
+
+export async function getSeasons(serieId: string): Promise<NiaziSeason[]> {
+  serieId = numId(serieId, "serieId");
+  const cacheKey = `niazi:seasons:${serieId}`;
+  const cached = cacheGet<NiaziSeason[]>(cacheKey);
+  if (cached && !cached.stale) return cached.value;
+
+  try {
+    const html = await fetchPage(`${BASE}/all-seasons?serie=${serieId}`);
+    const out: NiaziSeason[] = [];
+    const seen = new Set<string>();
+    for (const m of html.matchAll(RE_SEASON)) {
+      const id = m[3];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const yearMatch = m[0].match(/>\s*(20\d\d)\s*</);
+      out.push({
+        id,
+        title: m[5].trim(),
+        image: absUrl(m[1]),
+        year: yearMatch ? yearMatch[1] : "",
+        url: `${BASE}/drama/${id}/${m[4]}`,
+      });
+    }
+    if (out.length === 0) throw new Error("no seasons parsed (site structure changed?)");
+    cacheSet(cacheKey, out, NIAZI_TTL.seasons, NIAZI_TTL.staleSeasons);
+    return out;
+  } catch (e) {
+    if (cached) return cached.value; // stale fallback
+    throw e;
+  }
+}
+
+// ── 3. Episode list (per season) ────────────────────────────────────────────
 const RE_EPISODE = new RegExp(
   '<img src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>.*?' +
     'href="single-serie\\?watch=1&amp;episode=(\\d+)"',
@@ -140,14 +192,14 @@ function detectLang(title: string): NiaziEpisode["lang"] {
   return "unknown";
 }
 
-export async function getEpisodes(serieId: string): Promise<NiaziEpisode[]> {
-  serieId = numId(serieId, "serieId");
-  const cacheKey = `niazi:episodes:${serieId}`;
+export async function getEpisodes(seasonId: string): Promise<NiaziEpisode[]> {
+  seasonId = numId(seasonId, "seasonId");
+  const cacheKey = `niazi:episodes:${seasonId}`;
   const cached = cacheGet<NiaziEpisode[]>(cacheKey);
   if (cached && !cached.stale) return cached.value;
 
   try {
-    const html = await fetchPage(`${BASE}/drama/${serieId}/single-serie`);
+    const html = await fetchPage(`${BASE}/drama/${seasonId}`);
     const out: NiaziEpisode[] = [];
     const seen = new Set<string>();
     for (const m of html.matchAll(RE_EPISODE)) {
@@ -173,7 +225,7 @@ export async function getEpisodes(serieId: string): Promise<NiaziEpisode[]> {
   }
 }
 
-// ── 3. Stream URL ───────────────────────────────────────────────────────────
+// ── 4. Stream URL ───────────────────────────────────────────────────────────
 const RE_JSONLD = /<script type="application\/ld\+json">(.*?)<\/script>/gs;
 const RE_CONTENTURL = /"contentUrl"\s*:\s*"([^"]+\.m3u8[^"]*)"/i;
 
@@ -202,12 +254,12 @@ function extractContentUrl(html: string): { url: string; title: string } | null 
   return null;
 }
 
-export async function getStreamUrl(serieId: string, episodeId: string): Promise<NiaziStream> {
-  serieId = numId(serieId, "serieId");
+export async function getStreamUrl(seasonId: string, episodeId: string): Promise<NiaziStream> {
+  seasonId = numId(seasonId, "seasonId");
   episodeId = numId(episodeId, "episodeId");
 
   // NOTE: stream URLs are signed/time-limited — NEVER cache.
-  const pageUrl = `${BASE}/drama/${serieId}/single-serie?watch=1&episode=${episodeId}`;
+  const pageUrl = `${BASE}/drama/${seasonId}?watch=1&episode=${episodeId}`;
   const html = await fetchPage(pageUrl);
   const found = extractContentUrl(html);
   if (!found) throw new Error("no stream URL found on episode page");

@@ -5,7 +5,7 @@
 import { tmdb, TTL } from "../src/tmdb.js";
 import { resolveStream, providerHealth } from "../src/chain.js";
 import { cacheStats } from "../src/cache.js";
-import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
+import { getSeries, getSeasons, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
 import { getChannels, refreshChannels, groupByCategory } from "../src/livetv.js";
 
 const VERSION = "1.0.0";
@@ -65,8 +65,9 @@ export default async function handler(req: any, res: any) {
           "GET /v1/stream/movie/:tmdbId",
           "GET /v1/stream/tv/:tmdbId/:season/:episode",
           "GET /v1/niazi/series",
-          "GET /v1/niazi/series/:id/episodes",
-          "GET /v1/niazi/stream/:serieId/:episodeId",
+          "GET /v1/niazi/series/:id/seasons",
+          "GET /v1/niazi/seasons/:seasonId/episodes",
+          "GET /v1/niazi/stream/:seasonId/:episodeId",
           "GET /v1/livetv/channels",
         ],
       });
@@ -132,7 +133,11 @@ export default async function handler(req: any, res: any) {
       const data = await getSeries();
       return send(res, 200, ok(data), edgeCache(NIAZI_TTL.series, NIAZI_TTL.staleSeries));
     }
-    if ((m = path.match(/^\/v1\/niazi\/series\/([^/]+)\/episodes$/))) {
+    if ((m = path.match(/^\/v1\/niazi\/series\/([^/]+)\/seasons$/))) {
+      const data = await getSeasons(m[1]);
+      return send(res, 200, ok(data), edgeCache(NIAZI_TTL.seasons, NIAZI_TTL.staleSeasons));
+    }
+    if ((m = path.match(/^\/v1\/niazi\/seasons\/([^/]+)\/episodes$/))) {
       const data = await getEpisodes(m[1]);
       return send(res, 200, ok(data), edgeCache(NIAZI_TTL.episodes, NIAZI_TTL.staleEpisodes));
     }
