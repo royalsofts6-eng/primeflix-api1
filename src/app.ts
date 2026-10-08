@@ -4,18 +4,29 @@
  */
 import { Hono } from "hono";
 import { apiKeyAuth } from "./auth.js";
+import {
+  pfAuth,
+  handleRegister,
+  handleRefresh,
+  handleRevoke,
+  securityStats,
+} from "./security/middleware.js";
 import { tmdb, TTL, edgeCacheHeaders } from "./tmdb.js";
 import { resolveStream, providerHealth } from "./chain.js";
 import { cacheStats } from "./cache.js";
 import { getChannels, refreshChannels, groupByCategory } from "./livetv.js";
+import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "./niazitv.js";
 
 export const app = new Hono();
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const CLUSTER = process.env.CLUSTER_NAME || "api1";
 
 // ── Global middleware ───────────────────────────────────────────────────────
-app.use("*", apiKeyAuth);
+// pfAuth: day-1 X-API-Key (backward compat) + HMAC-SHA256 signed requests.
+// (Legacy apiKeyAuth kept as import for reference; pfAuth supersedes it.)
+app.use("*", pfAuth);
+void apiKeyAuth;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 type Handler = (c: any) => Promise<Response>;
@@ -64,9 +75,20 @@ app.get("/", (c) =>
       "GET /v1/stream/movie/:tmdbId",
       "GET /v1/stream/tv/:tmdbId/:season/:episode",
       "GET /v1/livetv/channels",
+      "GET /v1/niazi/series",
+      "GET /v1/niazi/series/:id/episodes",
+      "GET /v1/niazi/stream/:serieId/:episodeId",
+      "POST /v1/auth/register",
+      "POST /v1/auth/refresh",
+      "POST /v1/auth/revoke",
     ],
   })
 );
+
+// ── Auth (HMAC-SHA256 + JWT 24h) ────────────────────────────────────────────
+app.post("/v1/auth/register", handleRegister);
+app.post("/v1/auth/refresh", handleRefresh);
+app.post("/v1/auth/revoke", handleRevoke);
 
 app.get("/health", (c) =>
   c.json({
@@ -76,6 +98,7 @@ app.get("/health", (c) =>
     tmdbKeyConfigured: !!process.env.TMDB_API_KEY,
     providers: providerHealth(),
     cache: cacheStats(),
+    security: securityStats(),
   })
 );
 
@@ -176,6 +199,24 @@ app.get("/v1/cron/livetv-refresh", async (c) => {
     return c.json({ success: false, error: msg, code: "REFRESH_FAILED" }, 500);
   }
 });
+
+// ── NiaziTV Turkish dramas ──────────────────────────────────────────────────
+// Series list + episodes are cached (site rarely changes).
+// Stream URLs are signed/time-limited — NEVER cache these responses.
+app.get("/v1/niazi/series", wrap(async (c) => {
+  const data = await getSeries();
+  return ok(data, NIAZI_TTL.series, NIAZI_TTL.staleSeries)(c);
+}));
+
+app.get("/v1/niazi/series/:id/episodes", wrap(async (c) => {
+  const data = await getEpisodes(c.req.param("id"));
+  return ok(data, NIAZI_TTL.episodes, NIAZI_TTL.staleEpisodes)(c);
+}));
+
+app.get("/v1/niazi/stream/:serieId/:episodeId", wrap(async (c) => {
+  const data = await getStreamUrl(c.req.param("serieId"), c.req.param("episodeId"));
+  return c.json({ success: true, data }, 200, { "Cache-Control": "no-store" });
+}));
 
 // ── 404 ─────────────────────────────────────────────────────────────────────
 app.notFound((c) => c.json({ success: false, error: "not found", code: "NOT_FOUND" }, 404));

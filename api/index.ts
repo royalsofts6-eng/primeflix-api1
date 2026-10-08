@@ -5,10 +5,18 @@
 import { tmdb, TTL } from "../src/tmdb.js";
 import { resolveStream, providerHealth } from "../src/chain.js";
 import { cacheStats } from "../src/cache.js";
-import { getSeries, getSeasons, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
-import { getChannels, refreshChannels, groupByCategory } from "../src/livetv.js";
+import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
+import { securityStats } from "../src/security/middleware.js";
+import {
+  authGatePlain,
+  nodeHeaderGetter,
+  readBody,
+  registerPlain,
+  refreshPlain,
+  revokePlain,
+} from "../src/security/plain.js";
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const CLUSTER = process.env.CLUSTER_NAME || "api1";
 const PUBLIC_PATHS = new Set(["/", "/health", "/api", "/api/health"]);
 
@@ -40,12 +48,49 @@ export default async function handler(req: any, res: any) {
     let path = url.pathname.replace(/^\/api(?=\/|$)/, "") || "/";
     const q = url.searchParams;
 
-    // ── Auth (public paths skip) ──
-    if (!PUBLIC_PATHS.has(url.pathname) && !PUBLIC_PATHS.has(path)) {
-      const expected = process.env.API_KEY;
-      const got = req.headers["x-api-key"] || q.get("api_key");
-      if (!expected) return send(res, 500, fail("server misconfigured", "NO_API_KEY"));
-      if (got !== expected) return send(res, 401, fail("unauthorized", "BAD_API_KEY"));
+    // ── Auth ──
+    // Public paths skip. /v1/auth/* and /v1/cron/* handle their own auth.
+    const header = nodeHeaderGetter(req);
+    const clientIp =
+      (header("x-forwarded-for") || "").split(",")[0].trim() ||
+      header("x-real-ip") ||
+      "unknown";
+    const isAuthRoute = path.startsWith("/v1/auth/");
+    const isCronRoute = path.startsWith("/v1/cron/");
+    if (!PUBLIC_PATHS.has(url.pathname) && !PUBLIC_PATHS.has(path) && !isAuthRoute && !isCronRoute) {
+      // Read body for HMAC signature verification on non-GET requests.
+      let gateBody = "";
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        gateBody = await readBody(req);
+      }
+      // Also accept ?api_key= query param for day-1 compat
+      const qKey = q.get("api_key");
+      const gate = await authGatePlain(req.method || "GET", path, (n) => {
+        if (n === "X-API-Key") return header("X-API-Key") || qKey;
+        return header(n);
+      }, clientIp, gateBody);
+      if (!gate.ok) {
+        if (gate.retryAfter) res.setHeader("Retry-After", String(gate.retryAfter));
+        return send(res, gate.status || 401, fail(gate.error || "unauthorized", gate.code || "UNAUTHORIZED"));
+      }
+    }
+
+    // ── Auth routes (own auth handling) ──
+    if (path === "/v1/auth/register" && req.method === "POST") {
+      const body = await readBody(req);
+      const r = await registerPlain(body, clientIp);
+      if (r.status === 429) res.setHeader("Retry-After", "60");
+      return send(res, r.status, r.json);
+    }
+    if (path === "/v1/auth/refresh" && req.method === "POST") {
+      const body = await readBody(req);
+      const r = await refreshPlain(body);
+      return send(res, r.status, r.json);
+    }
+    if (path === "/v1/auth/revoke" && req.method === "POST") {
+      const body = await readBody(req);
+      const r = await revokePlain(body, header);
+      return send(res, r.status, r.json);
     }
 
     // ── Routes ──
@@ -64,11 +109,12 @@ export default async function handler(req: any, res: any) {
           "GET /v1/tmdb/tv/:id/recommendations",
           "GET /v1/stream/movie/:tmdbId",
           "GET /v1/stream/tv/:tmdbId/:season/:episode",
+          "POST /v1/auth/register",
+          "POST /v1/auth/refresh",
+          "POST /v1/auth/revoke",
           "GET /v1/niazi/series",
-          "GET /v1/niazi/series/:id/seasons",
-          "GET /v1/niazi/seasons/:seasonId/episodes",
-          "GET /v1/niazi/stream/:seasonId/:episodeId",
-          "GET /v1/livetv/channels",
+          "GET /v1/niazi/series/:id/episodes",
+          "GET /v1/niazi/stream/:serieId/:episodeId",
         ],
       });
     }
@@ -78,6 +124,7 @@ export default async function handler(req: any, res: any) {
         ok: true, cluster: CLUSTER, version: VERSION,
         tmdbKeyConfigured: !!process.env.TMDB_API_KEY,
         providers: providerHealth(), cache: cacheStats(),
+        security: securityStats(),
       });
     }
 
@@ -133,44 +180,13 @@ export default async function handler(req: any, res: any) {
       const data = await getSeries();
       return send(res, 200, ok(data), edgeCache(NIAZI_TTL.series, NIAZI_TTL.staleSeries));
     }
-    if ((m = path.match(/^\/v1\/niazi\/series\/([^/]+)\/seasons$/))) {
-      const data = await getSeasons(m[1]);
-      return send(res, 200, ok(data), edgeCache(NIAZI_TTL.seasons, NIAZI_TTL.staleSeasons));
-    }
-    if ((m = path.match(/^\/v1\/niazi\/seasons\/([^/]+)\/episodes$/))) {
+    if ((m = path.match(/^\/v1\/niazi\/series\/([^/]+)\/episodes$/))) {
       const data = await getEpisodes(m[1]);
       return send(res, 200, ok(data), edgeCache(NIAZI_TTL.episodes, NIAZI_TTL.staleEpisodes));
     }
     if ((m = path.match(/^\/v1\/niazi\/stream\/([^/]+)\/([^/]+)$/))) {
       const data = await getStreamUrl(m[1], m[2]);
       return send(res, 200, ok(data), { "Cache-Control": "no-store" });
-    }
-
-    // Live TV — auto-updating channels (12h TTL + 7d stale)
-    if (path === "/v1/livetv/channels") {
-      const result = await getChannels();
-      return send(res, 200, ok({
-        refreshedAt: result.refreshedAt,
-        total: result.total,
-        alive: result.alive,
-        categories: groupByCategory(result.channels),
-      }), edgeCache(12 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000));
-    }
-
-    // Cron: Live TV refresh (CRON_SECRET protected)
-    // Vercel Hobby only allows DAILY cron — 12h TTL + SWR keeps data fresh.
-    if (path === "/v1/cron/livetv-refresh") {
-      const secret = process.env.CRON_SECRET;
-      const auth = req.headers["authorization"] || "";
-      if (!secret || auth !== `Bearer ${secret}`) {
-        return send(res, 401, fail("unauthorized", "BAD_CRON_SECRET"));
-      }
-      const result = await refreshChannels();
-      return send(res, 200, ok({
-        refreshedAt: result.refreshedAt,
-        total: result.total,
-        alive: result.alive,
-      }));
     }
 
     return send(res, 404, fail("not found", "NOT_FOUND"));
