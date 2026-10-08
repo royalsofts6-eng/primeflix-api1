@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "hono": "^4.6.0",
     "tweetnacl": "^1.0.3"
   },
   "description": "PrimeFlix API Cluster 1 \u2014 TMDB proxy + multi-provider streaming",
