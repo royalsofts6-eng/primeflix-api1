@@ -6,6 +6,7 @@ import { tmdb, TTL } from "../src/tmdb.js";
 import { resolveStream, providerHealth } from "../src/chain.js";
 import { cacheStats } from "../src/cache.js";
 import { getSeries, getEpisodes, getStreamUrl, NIAZI_TTL } from "../src/niazitv.js";
+import { getChannels, refreshChannels, groupByCategory } from "../src/livetv.js";
 import { securityStats } from "../src/security/middleware.js";
 import {
   authGatePlain,
@@ -115,6 +116,8 @@ export default async function handler(req: any, res: any) {
           "GET /v1/niazi/series",
           "GET /v1/niazi/series/:id/episodes",
           "GET /v1/niazi/stream/:serieId/:episodeId",
+          "GET /v1/livetv/channels",
+          "GET /v1/cron/livetv-refresh",
         ],
       });
     }
@@ -175,9 +178,6 @@ export default async function handler(req: any, res: any) {
       return send(res, 200, ok(data), { "Cache-Control": "no-store" });
     }
 
-
-    }
-
     // NiaziTV Turkish dramas (stream URLs NEVER cached — signed/expiring)
     if (path === "/v1/niazi/series") {
       const data = await getSeries();
@@ -190,6 +190,25 @@ export default async function handler(req: any, res: any) {
     if ((m = path.match(/^\/v1\/niazi\/stream\/([^/]+)\/([^/]+)$/))) {
       const data = await getStreamUrl(m[1], m[2]);
       return send(res, 200, ok(data), { "Cache-Control": "no-store" });
+    }
+
+    // Live TV channels (12h cache + 7d stale; cron refreshes in background)
+    if (path === "/v1/livetv/channels") {
+      const data = await getChannels();
+      return send(res, 200, ok({
+        refreshedAt: data.refreshedAt,
+        total: data.total,
+        alive: data.alive,
+        groups: groupByCategory(data.channels),
+      }), edgeCache(12 * 3600 * 1000, 7 * 24 * 3600 * 1000));
+    }
+    if (path === "/v1/cron/livetv-refresh") {
+      const secret = q.get("secret") || header("x-cron-secret");
+      if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+        return send(res, 401, fail("unauthorized", "BAD_CRON_SECRET"));
+      }
+      const data = await refreshChannels();
+      return send(res, 200, ok({ refreshedAt: data.refreshedAt, total: data.total, alive: data.alive }));
     }
 
     return send(res, 404, fail("not found", "NOT_FOUND"));

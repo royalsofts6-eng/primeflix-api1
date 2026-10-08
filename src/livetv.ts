@@ -491,20 +491,17 @@ export async function getChannels(): Promise<RefreshResult> {
     refreshChannels().catch(() => {});
     return cached.value;
   }
-  // Cold start: refresh synchronously (first deploy)
-  try {
-    return await refreshChannels();
-  } catch {
-    // Playlists unreachable — serve curated list as-is
-    const result: RefreshResult = {
-      refreshedAt: Date.now(),
-      total: CURATED.length,
-      alive: CURATED.filter((c) => c.url || c.type === "youtube").length,
-      channels: CURATED,
-    };
-    cacheSet(CACHE_KEY, result, TTL_MS, STALE_MS);
-    return result;
-  }
+  // Cold start: serve curated list immediately (fast, avoids Vercel 10s kill),
+  // refresh in background so next request gets probed URLs.
+  const result: RefreshResult = {
+    refreshedAt: Date.now(),
+    total: CURATED.length,
+    alive: CURATED.filter((c) => c.url || c.type === "youtube").length,
+    channels: CURATED,
+  };
+  cacheSet(CACHE_KEY, result, TTL_MS, STALE_MS);
+  refreshChannels().catch(() => {});
+  return result;
 }
 
 /** Group channels by category for the API response. */
