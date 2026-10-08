@@ -1,1 +1,1 @@
-{"rewrites":[{"destination":"/api/index.ts","source":"/(.*)"}]}
+{"crons":[{"path":"/v1/cron/livetv-refresh","schedule":"0 2 * * *"}],"rewrites":[{"destination":"/api/index.ts","source":"/(.*)"}]}

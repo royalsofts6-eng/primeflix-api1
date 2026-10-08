@@ -7,6 +7,7 @@ import { apiKeyAuth } from "./auth.js";
 import { tmdb, TTL, edgeCacheHeaders } from "./tmdb.js";
 import { resolveStream, providerHealth } from "./chain.js";
 import { cacheStats } from "./cache.js";
+import { getChannels, refreshChannels, groupByCategory } from "./livetv.js";
 
 export const app = new Hono();
 
@@ -62,6 +63,7 @@ app.get("/", (c) =>
       "GET /v1/tmdb/tv/:id/recommendations",
       "GET /v1/stream/movie/:tmdbId",
       "GET /v1/stream/tv/:tmdbId/:season/:episode",
+      "GET /v1/livetv/channels",
     ],
   })
 );
@@ -136,6 +138,44 @@ app.get("/v1/stream/tv/:tmdbId/:season/:episode", wrap(async (c) => {
   );
   return c.json({ success: true, data }, 200, { "Cache-Control": "no-store" });
 }));
+
+// ── Live TV ─────────────────────────────────────────────────────────────────
+// Channel list is edge-cached 12h + 7d stale (auto-refreshes via cron/SWR).
+app.get("/v1/livetv/channels", wrap(async (c) => {
+  const result = await getChannels();
+  return ok(
+    {
+      refreshedAt: result.refreshedAt,
+      total: result.total,
+      alive: result.alive,
+      categories: groupByCategory(result.channels),
+    },
+    12 * 60 * 60 * 1000, // 12h edge cache
+    7 * 24 * 60 * 60 * 1000 // 7d stale
+  )(c);
+}));
+
+// ── Cron: Live TV refresh ───────────────────────────────────────────────────
+// Protected by CRON_SECRET (Vercel cron sends it as Authorization header).
+// Vercel Hobby only allows DAILY cron — the 12h TTL + SWR above keeps data
+// fresh regardless of cron frequency.
+app.get("/v1/cron/livetv-refresh", async (c) => {
+  const secret = process.env.CRON_SECRET;
+  const auth = c.req.header("Authorization") || "";
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return c.json({ success: false, error: "unauthorized", code: "BAD_CRON_SECRET" }, 401);
+  }
+  try {
+    const result = await refreshChannels();
+    return c.json({
+      success: true,
+      data: { refreshedAt: result.refreshedAt, total: result.total, alive: result.alive },
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ success: false, error: msg, code: "REFRESH_FAILED" }, 500);
+  }
+});
 
 // ── 404 ─────────────────────────────────────────────────────────────────────
 app.notFound((c) => c.json({ success: false, error: "not found", code: "NOT_FOUND" }, 404));
